@@ -1,0 +1,115 @@
+"""
+Application settings using Pydantic Settings.
+Loads configuration from environment variables and .env file.
+"""
+
+from pydantic_settings import BaseSettings
+from typing import Optional, Literal
+from pathlib import Path
+
+
+class Settings(BaseSettings):
+    """Application settings with environment variable support."""
+    
+    # Application
+    app_name: str = "Enterprise Agentic RAG Platform"
+    app_version: str = "0.1.0"
+    environment: Literal["development", "staging", "production"] = "development"
+    debug: bool = True
+    
+    # API
+    api_host: str = "0.0.0.0"
+    api_port: int = 8000
+    api_prefix: str = "/api/v1"
+    
+    # Database
+    db_host: str = "localhost"
+    db_port: int = 5432
+    db_name: str = "rag_platform"
+    db_user: str = "rag_user"
+    db_password: str = "changeme"
+    
+    # Redis
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    
+    # Ollama
+    ollama_host: str = "http://localhost:11434"
+    ollama_default_model: str = "qwen3:4b"
+    ollama_timeout: int = 120
+    
+    # Hugging Face
+    hf_home: str = "./models"
+    hf_default_model: str = "Qwen/Qwen2.5-3B-Instruct"
+    hf_cache_dir: Optional[str] = None
+    
+    # LLM Provider
+    default_provider: Literal["ollama", "huggingface", "openai", "anthropic", "gemini", "azure"] = "ollama"
+    fallback_provider: Optional[str] = "huggingface"
+    
+    # Generation defaults
+    default_temperature: float = 0.7
+    default_max_tokens: int = 512
+    
+    # RAG Configuration (Phase 1)
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_dimension: int = 384
+    embedding_batch_size: int = 32
+    chunk_size: int = 1000
+    chunk_overlap: int = 200
+    chunk_separators: list[str] = ["\n\n", "\n", " ", ""]
+    top_k_retrieval: int = 5
+    
+    # Document Processing (Phase 1)
+    max_file_size: int = 10485760  # 10MB
+    allowed_extensions: list[str] = [".pdf", ".docx"]
+    upload_dir: str = "data/raw"
+    processed_dir: str = "data/processed"
+    vectorstore_dir: str = "data/vectorstore"
+    faiss_index_path: str = "data/vectorstore/faiss_index.bin"
+    metadata_path: str = "data/vectorstore/metadata.json"
+    
+    # Logging
+    log_level: str = "INFO"
+    log_file: str = "logs/app.log"
+    log_max_size: int = 10485760  # 10MB
+    log_backup_count: int = 5
+    log_format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    
+    # CORS
+    cors_origins: list[str] = ["http://localhost:8501", "http://localhost:3000"]
+    cors_allow_credentials: bool = True
+    cors_allow_methods: list[str] = ["*"]
+    cors_allow_headers: list[str] = ["*"]
+    
+    @property
+    def database_url(self) -> str:
+        """Construct PostgreSQL database URL."""
+        return f"postgresql://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+    
+    @property
+    def redis_url(self) -> str:
+        """Construct Redis connection URL."""
+        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
+    
+    @property
+    def is_development(self) -> bool:
+        """Check if running in development mode."""
+        return self.environment == "development"
+    
+    @property
+    def is_production(self) -> bool:
+        """Check if running in production mode."""
+        return self.environment == "production"
+    
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+
+
+# Global settings instance
+settings = Settings()
+
+# Made with Bob

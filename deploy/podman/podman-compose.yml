@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: docker.io/library/postgres:16
+    container_name: rag_postgres
+    environment:
+      POSTGRES_DB: rag_platform
+      POSTGRES_USER: rag_user
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8'
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U rag_user -d rag_platform']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - rag_network
+
+  redis:
+    image: docker.io/library/redis:7-alpine
+    container_name: rag_redis
+    command: redis-server --appendonly yes
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - rag_network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  rag_network:
+    driver: bridge
+
+# Made with Bob
