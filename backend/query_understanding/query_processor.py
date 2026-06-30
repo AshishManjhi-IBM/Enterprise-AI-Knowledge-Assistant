@@ -13,6 +13,7 @@ from backend.query_understanding.query_expander import QueryExpander
 from backend.query_understanding.query_reformulator import QueryReformulator
 from backend.query_understanding.hyde_generator import HyDEGenerator
 from backend.llm.llm_service import LLMService
+from backend.core.settings import settings
 from backend.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -127,11 +128,25 @@ class QueryProcessor:
             hyde_generator: HyDE generator instance
         """
         self.llm_service = llm_service or LLMService()
-        
-        # Initialize components
-        self.expander = expander or QueryExpander(llm_service=self.llm_service)
-        self.reformulator = reformulator or QueryReformulator(llm_service=self.llm_service)
-        self.hyde_generator = hyde_generator or HyDEGenerator(llm_service=self.llm_service)
+
+        # Initialize components, picking up token budgets from settings
+        self.expander = expander or QueryExpander(
+            llm_service=self.llm_service,
+            default_num_expansions=settings.num_query_expansions,
+            temperature=settings.query_expansion_temperature,
+            max_tokens=settings.query_expansion_max_tokens,
+        )
+        self.reformulator = reformulator or QueryReformulator(
+            llm_service=self.llm_service,
+            temperature=settings.query_reformulation_temperature,
+            max_tokens=settings.query_reformulation_max_tokens,
+        )
+        self.hyde_generator = hyde_generator or HyDEGenerator(
+            llm_service=self.llm_service,
+            temperature=settings.hyde_temperature,
+            max_tokens=settings.hyde_max_tokens,
+            use_technical_prompt=settings.use_technical_hyde,
+        )
         
         logger.info("Initialized QueryProcessor with all components")
     

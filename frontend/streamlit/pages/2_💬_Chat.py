@@ -62,6 +62,43 @@ with st.sidebar:
         top_k = 5
         retrieval_method = "hybrid"
     
+    # Query Understanding (Phase 3)
+    st.subheader("🧠 Query Understanding")
+    with st.expander("Configure query techniques", expanded=False):
+        enable_query_understanding = st.toggle(
+            "Enable Query Understanding",
+            value=False,
+            help="Use LLM to improve your query before retrieval (adds latency)"
+        )
+        if enable_query_understanding:
+            enable_reformulation = st.checkbox(
+                "Reformulation",
+                value=True,
+                help="Clarify vague or ambiguous queries (e.g. resolves pronouns)"
+            )
+            enable_expansion = st.checkbox(
+                "Expansion",
+                value=True,
+                help="Generate alternative phrasings to increase recall"
+            )
+            num_expansions = st.slider(
+                "Expansion variants",
+                min_value=1, max_value=5, value=3,
+                help="How many alternative queries to generate"
+            )
+            enable_hyde = st.checkbox(
+                "HyDE",
+                value=True,
+                help="Generate a hypothetical answer and use it for semantic search"
+            )
+        else:
+            enable_reformulation = False
+            enable_expansion = False
+            enable_hyde = False
+            num_expansions = 3
+    
+    st.divider()
+    
     # Generation settings
     st.subheader("🎛️ Generation")
     temperature = st.slider(
@@ -213,6 +250,15 @@ if prompt := st.chat_input("Ask a question about your documents..."):
                 "max_tokens": max_tokens,
                 "retrieval_method": retrieval_method if use_rag else None
             }
+
+            # Add query understanding options when enabled
+            if use_rag and enable_query_understanding:
+                request_data["query_understanding"] = {
+                    "enable_reformulation": enable_reformulation,
+                    "enable_expansion": enable_expansion,
+                    "enable_hyde": enable_hyde,
+                    "num_expansions": num_expansions
+                }
             
             # Show loading
             with st.spinner("Thinking..."):
@@ -299,6 +345,29 @@ if prompt := st.chat_input("Ask a question about your documents..."):
                     "sources": sources
                 })
                 
+                # Show query understanding metadata when available
+                qm = data.get("query_metadata")
+                if qm:
+                    techniques = qm.get("techniques_applied", {})
+                    any_applied = any(techniques.values())
+                    if any_applied:
+                        with st.expander("🧠 Query Understanding applied", expanded=False):
+                            if techniques.get("reformulation") and qm.get("reformulated_query"):
+                                st.markdown(
+                                    f"**Reformulated:** {qm['reformulated_query']}"
+                                )
+                            if techniques.get("expansion") and qm.get("expanded_queries"):
+                                st.markdown("**Expanded queries:**")
+                                for eq in qm["expanded_queries"]:
+                                    st.markdown(f"- {eq}")
+                            if techniques.get("hyde") and qm.get("hyde_answer"):
+                                with st.expander("HyDE answer (used for semantic search)", expanded=False):
+                                    st.markdown(qm["hyde_answer"])
+                            st.caption(
+                                f"Query processing: {qm.get('processing_time', 0):.2f}s · "
+                                f"{qm.get('total_queries', 1)} total queries"
+                            )
+
                 # Show metadata
                 model = data.get("model", "unknown")
                 tokens = data.get("tokens_used", 0)

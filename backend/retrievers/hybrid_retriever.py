@@ -131,26 +131,32 @@ class HybridRetriever:
         top_k: int = 5,
         method: Literal["hybrid", "faiss", "bm25"] = "hybrid",
         document_ids: Optional[List[str]] = None,
-        min_score: float = 0.0
+        min_score: float = 0.0,
+        faiss_query: Optional[str] = None
     ) -> List[HybridRetrievalResult]:
         """
         Retrieve documents using specified method.
         
         Args:
-            query: Search query
+            query: Search query (also used for BM25 and as fallback for FAISS)
             top_k: Number of results to return
             method: Retrieval method (hybrid/faiss/bm25)
             document_ids: Filter by document IDs
             min_score: Minimum score threshold
+            faiss_query: Optional alternative text for FAISS semantic search (e.g. HyDE answer).
+                         When provided, FAISS uses this text while BM25 still uses ``query``.
             
         Returns:
             List of hybrid retrieval results
         """
         start_time = time.time()
         
+        # Semantic query: use HyDE / expanded text when provided, else fall back to query
+        semantic_query = faiss_query if faiss_query else query
+
         if method == "faiss":
             results = await self._retrieve_faiss_only(
-                query, top_k, document_ids, min_score
+                semantic_query, top_k, document_ids, min_score
             )
         elif method == "bm25":
             results = await self._retrieve_bm25_only(
@@ -158,7 +164,8 @@ class HybridRetriever:
             )
         else:  # hybrid
             results = await self._retrieve_hybrid(
-                query, top_k, document_ids, min_score
+                query, top_k, document_ids, min_score,
+                faiss_query=semantic_query
             )
         
         elapsed = time.time() - start_time
@@ -234,15 +241,19 @@ class HybridRetriever:
         query: str,
         top_k: int,
         document_ids: Optional[List[str]],
-        min_score: float
+        min_score: float,
+        faiss_query: Optional[str] = None
     ) -> List[HybridRetrievalResult]:
         """Retrieve using hybrid approach (FAISS + BM25 + RRF)."""
         # Retrieve from both sources in parallel
         # Get more results than needed for better fusion
         retrieval_k = top_k * 2
-        
+
+        # FAISS uses semantic_query (may be HyDE); BM25 always uses original query
+        semantic_query = faiss_query if faiss_query else query
+
         faiss_task = self.faiss_retriever.retrieve(
-            query=query,
+            query=semantic_query,
             top_k=retrieval_k,
             document_ids=document_ids,
             min_score=0.0  # Apply threshold after fusion

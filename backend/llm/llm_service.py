@@ -51,6 +51,7 @@ class LLMService:
             logger.warning(f"Unsupported provider: {self.provider}")
             self.client = None
         
+        self.provider_name = self.provider  # alias used by query understanding components
         logger.info(f"Initialized LLMService with provider: {self.provider}, model: {self.model}")
     
     async def generate(
@@ -92,43 +93,89 @@ class LLMService:
             full_prompt = prompt
             if system_message:
                 full_prompt = f"{system_message}\n\n{prompt}"
-            
+
+            # Build request payload.
+            # think=False: disable qwen3 internal reasoning so all tokens go to response.
+            # num_ctx: explicitly set context window so Ollama doesn't default to a
+            #          smaller value and truncate long RAG prompts.
+            payload: Dict[str, Any] = {
+                "model": self.model,
+                "prompt": full_prompt,
+                "temperature": temperature,
+                "options": {
+                    "num_predict": max_tokens,
+                    "num_ctx": settings.ollama_num_ctx,
+                },
+                "think": False,
+                "stream": False,
+            }
+
             # Call Ollama API
             response = await self.client.post(
                 f"{self.base_url}/api/generate",
-                json={
-                    "model": self.model,
-                    "prompt": full_prompt,
-                    "temperature": temperature,
-                    "options": {
-                        "num_predict": max_tokens
-                    },
-                    "stream": False
-                }
+                json=payload
             )
             response.raise_for_status()
             
             data = response.json()
             generated_text = data.get("response", "")
-            
-            # Debug logging
+
+            # qwen3 thinking models may return the answer in the `thinking` field
+            # when response is empty (model used all tokens for internal reasoning).
+            # Fall back to thinking text so we never silently drop the output.
             if not generated_text:
-                logger.warning(f"Ollama returned empty response. Full data: {data}")
+                thinking_text = data.get("thinking", "")
+                if thinking_text:
+                    logger.warning(
+                        f"Ollama 'response' was empty; using 'thinking' field as fallback "
+                        f"({len(thinking_text)} chars). Consider adding think=False or "
+                        f"increasing max_tokens."
+                    )
+                    generated_text = thinking_text
+                else:
+                    logger.warning(
+                        f"Ollama returned empty response and no thinking text. "
+                        f"done_reason={data.get('done_reason')}, "
+                        f"eval_count={data.get('eval_count')}"
+                    )
             else:
                 logger.info(f"Ollama generated {len(generated_text)} characters")
-            
+
             result = {
                 "text": generated_text,
                 "model": self.model,
                 "tokens_used": data.get("eval_count", 0),
-                "finish_reason": "stop"
+                "finish_reason": data.get("done_reason", "stop"),
             }
             
             logger.info(f"Generated {result['tokens_used']} tokens with Ollama")
             return result
             
+        except httpx.TimeoutException as e:
+            msg = (
+                f"Ollama request timed out after {settings.ollama_timeout}s. "
+                f"The model may still be loading or the prompt is too long. "
+                f"Try increasing OLLAMA_TIMEOUT in settings or reducing max_tokens. "
+                f"Detail: {e}"
+            )
+            logger.error(msg)
+            raise RuntimeError(msg) from e
+        except httpx.ConnectError as e:
+            msg = (
+                f"Cannot connect to Ollama at {self.base_url}. "
+                f"Make sure Ollama is running ('ollama serve'). Detail: {e}"
+            )
+            logger.error(msg)
+            raise RuntimeError(msg) from e
+        except httpx.HTTPStatusError as e:
+            msg = (
+                f"Ollama returned HTTP {e.response.status_code}. "
+                f"Response body: {e.response.text[:500]}"
+            )
+            logger.error(msg)
+            raise RuntimeError(msg) from e
         except Exception as e:
-            logger.error(f"Ollama generation failed: {e}")
+            logger.error(f"Ollama generation failed: {type(e).__name__}: {e}")
             raise
     
     async def _generate_openai(
@@ -208,6 +255,7 @@ class LLMService:
     ) -> AsyncIterator[Dict[str, Any]]:
         """Stream using Ollama."""
         try:
+            import json as _json
             full_prompt = prompt
             if system_message:
                 full_prompt = f"{system_message}\n\n{prompt}"
@@ -219,24 +267,33 @@ class LLMService:
                     "model": self.model,
                     "prompt": full_prompt,
                     "temperature": temperature,
-                    "options": {"num_predict": max_tokens},
-                    "stream": True
+                    "options": {
+                        "num_predict": max_tokens,
+                        "num_ctx": settings.ollama_num_ctx,
+                    },
+                    "think": False,
+                    "stream": True,
                 }
             ) as response:
                 async for line in response.aiter_lines():
                     if line:
-                        import json
-                        data = json.loads(line)
-                        if "response" in data:
-                            yield {
-                                "type": "token",
-                                "content": data["response"]
-                            }
+                        data = _json.loads(line)
+                        token = data.get("response", "")
+                        if token:
+                            yield {"type": "token", "content": token}
                         if data.get("done"):
                             yield {"type": "done", "model": self.model}
                             break
+        except httpx.TimeoutException as e:
+            msg = f"Ollama streaming timed out after {settings.ollama_timeout}s. Detail: {e}"
+            logger.error(msg)
+            raise RuntimeError(msg) from e
+        except httpx.ConnectError as e:
+            msg = f"Cannot connect to Ollama at {self.base_url} for streaming. Detail: {e}"
+            logger.error(msg)
+            raise RuntimeError(msg) from e
         except Exception as e:
-            logger.error(f"Ollama streaming failed: {e}")
+            logger.error(f"Ollama streaming failed: {type(e).__name__}: {e}")
             raise
     
     async def _generate_stream_openai(

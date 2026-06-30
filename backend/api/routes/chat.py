@@ -13,11 +13,13 @@ from backend.api.models.chat import (
     ChatRequest,
     ChatResponse,
     ChatMessage,
+    QueryMetadata,
     SourceReference,
     StreamChatRequest,
     StreamChunk
 )
 from backend.llm.rag_chain import RAGChain
+from backend.query_understanding.query_processor import QueryUnderstandingOptions as QUOptions
 from backend.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -53,6 +55,16 @@ async def chat(request: ChatRequest):
                 for msg in request.history
             ]
         
+        # Build query understanding options if provided in the request
+        qu_options = None
+        if request.query_understanding is not None:
+            qu_options = QUOptions(
+                enable_reformulation=request.query_understanding.enable_reformulation,
+                enable_expansion=request.query_understanding.enable_expansion,
+                enable_hyde=request.query_understanding.enable_hyde,
+                num_expansions=request.query_understanding.num_expansions
+            )
+
         # Generate response using RAG
         result = await rag_chain.generate_response(
             query=request.message,
@@ -61,7 +73,8 @@ async def chat(request: ChatRequest):
             conversation_history=history_dicts,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
-            retrieval_method=request.retrieval_method
+            retrieval_method=request.retrieval_method,
+            query_understanding_options=qu_options
         )
         
         # Format sources with proper defaults
@@ -90,6 +103,19 @@ async def chat(request: ChatRequest):
         
         # Get metadata
         metadata = result.get("metadata", {})
+
+        # Build query_metadata if query understanding was applied
+        query_metadata = None
+        raw_qm = result.get("query_metadata")
+        if raw_qm:
+            query_metadata = QueryMetadata(
+                original_query=raw_qm.get("original_query", request.message),
+                reformulated_query=raw_qm.get("reformulated_query"),
+                expanded_queries=raw_qm.get("expanded_queries", []),
+                hyde_answer=raw_qm.get("hyde_answer"),
+                processing_time=raw_qm.get("processing_time", 0.0),
+                techniques_applied=raw_qm.get("techniques_applied", {})
+            )
         
         return ChatResponse(
             conversation_id=conversation_id,
@@ -98,7 +124,8 @@ async def chat(request: ChatRequest):
             model=metadata.get("model", "unknown"),
             tokens_used=metadata.get("tokens_used", 0),
             processing_time=metadata.get("total_time", 0.0),
-            retrieval_method=metadata.get("retrieval_method")
+            retrieval_method=metadata.get("retrieval_method"),
+            query_metadata=query_metadata
         )
         
     except Exception as e:

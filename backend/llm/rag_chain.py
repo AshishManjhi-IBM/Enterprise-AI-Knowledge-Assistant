@@ -8,6 +8,7 @@ import time
 from backend.retrievers.retriever import DocumentRetriever, RetrievalResult
 from backend.retrievers.hybrid_retriever import HybridRetriever, HybridRetrievalResult
 from backend.llm.llm_service import LLMService
+from backend.query_understanding.query_processor import QueryProcessor, QueryUnderstandingOptions
 from backend.core.settings import settings
 from backend.core.logging import get_logger
 
@@ -25,7 +26,8 @@ class RAGChain:
         self,
         retriever: Optional[HybridRetriever] = None,
         llm_service: Optional[LLMService] = None,
-        use_hybrid: bool = True
+        use_hybrid: bool = True,
+        query_processor: Optional[QueryProcessor] = None
     ):
         """
         Initialize RAG chain.
@@ -34,6 +36,7 @@ class RAGChain:
             retriever: Hybrid retriever (or basic DocumentRetriever for backward compatibility)
             llm_service: LLM service for generation
             use_hybrid: Whether to use hybrid retrieval (default: True)
+            query_processor: Query understanding processor (Phase 3)
         """
         if use_hybrid:
             self.retriever = retriever or HybridRetriever()
@@ -44,9 +47,10 @@ class RAGChain:
             self.is_hybrid = False
         
         self.llm_service = llm_service or LLMService()
+        self.query_processor = query_processor or QueryProcessor(llm_service=self.llm_service)
         
         retriever_type = "HybridRetriever" if self.is_hybrid else "DocumentRetriever"
-        logger.info(f"Initialized RAGChain with {retriever_type}")
+        logger.info(f"Initialized RAGChain with {retriever_type} and QueryProcessor")
     
     async def generate_response(
         self,
@@ -56,7 +60,8 @@ class RAGChain:
         conversation_history: Optional[List[Dict[str, str]]] = None,
         temperature: float = 0.7,
         max_tokens: int = 500,
-        retrieval_method: Optional[Literal["hybrid", "faiss", "bm25"]] = None
+        retrieval_method: Optional[Literal["hybrid", "faiss", "bm25"]] = None,
+        query_understanding_options: Optional[QueryUnderstandingOptions] = None
     ) -> Dict[str, Any]:
         """
         Generate a response using RAG.
@@ -69,6 +74,7 @@ class RAGChain:
             temperature: Generation temperature
             max_tokens: Maximum tokens in response
             retrieval_method: Retrieval method (hybrid/faiss/bm25), uses default if None
+            query_understanding_options: Phase 3 query processing options
             
         Returns:
             Dictionary with response, sources, and metadata
@@ -79,15 +85,41 @@ class RAGChain:
         start_time = time.time()
         
         try:
-            # Step 1: Retrieve relevant documents
+            # Step 1: Query Understanding (Phase 3)
+            query_processing_result = None
+            if query_understanding_options is not None:
+                try:
+                    query_processing_result = await self.query_processor.process(
+                        query=query,
+                        options=query_understanding_options,
+                        conversation_history=conversation_history
+                    )
+                    logger.info(
+                        f"Query understanding complete in "
+                        f"{query_processing_result.processing_time:.3f}s"
+                    )
+                except Exception as qe:
+                    logger.error(f"Query understanding failed (continuing without it): {qe}")
+
+            # Determine effective retrieval query
+            retrieval_query = query
+            faiss_query = None
+            if query_processing_result is not None:
+                retrieval_query = query_processing_result.get_primary_query()
+                # Use HyDE answer for FAISS semantic search when available
+                if query_processing_result.hyde_applied and query_processing_result.hyde_answer:
+                    faiss_query = query_processing_result.hyde_answer
+
+            # Step 2: Retrieve relevant documents
             retrieval_start = time.time()
             
             if self.is_hybrid:
                 retrieval_results = await self.retriever.retrieve(  # type: ignore
-                    query=query,
+                    query=retrieval_query,
                     top_k=top_k,
                     document_ids=document_ids,
-                    method=retrieval_method
+                    method=retrieval_method,
+                    faiss_query=faiss_query
                 )
                 # Format context using hybrid retriever's method
                 context = self.retriever.format_context(  # type: ignore
@@ -96,9 +128,9 @@ class RAGChain:
                     include_metadata=True
                 )
             else:
-                # Basic retriever doesn't support method parameter
+                # Basic retriever doesn't support method/faiss_query parameters
                 retrieval_results = await self.retriever.retrieve(  # type: ignore
-                    query=query,
+                    query=retrieval_query,
                     top_k=top_k,
                     document_ids=document_ids
                 )
@@ -117,6 +149,7 @@ class RAGChain:
             )
             
             # Step 3: Build prompt with context
+            # Use original query for the prompt so the answer stays on-topic
             prompt = self._build_prompt(
                 query=query,
                 context=context,
@@ -142,7 +175,7 @@ class RAGChain:
             # Calculate total time
             total_time = time.time() - start_time
             
-            return {
+            result = {
                 "response": response["text"],
                 "sources": sources,
                 "metadata": {
@@ -155,6 +188,12 @@ class RAGChain:
                     "retrieval_method": retrieval_method
                 }
             }
+
+            # Include query understanding metadata if processing was performed
+            if query_processing_result is not None:
+                result["query_metadata"] = query_processing_result.to_dict()
+
+            return result
             
         except Exception as e:
             logger.error(f"RAG generation failed: {e}")
@@ -168,7 +207,8 @@ class RAGChain:
         conversation_history: Optional[List[Dict[str, str]]] = None,
         temperature: float = 0.7,
         max_tokens: int = 500,
-        retrieval_method: Optional[Literal["hybrid", "faiss", "bm25"]] = None
+        retrieval_method: Optional[Literal["hybrid", "faiss", "bm25"]] = None,
+        query_understanding_options: Optional[QueryUnderstandingOptions] = None
     ):
         """
         Generate a streaming response using RAG.
@@ -181,6 +221,7 @@ class RAGChain:
             temperature: Generation temperature
             max_tokens: Maximum tokens in response
             retrieval_method: Retrieval method (hybrid/faiss/bm25)
+            query_understanding_options: Phase 3 query processing options
             
         Yields:
             Response chunks
@@ -189,13 +230,30 @@ class RAGChain:
         if retrieval_method is None:
             retrieval_method = settings.default_retrieval_method
         try:
-            # Step 1: Retrieve relevant documents
+            # Step 1: Query Understanding (Phase 3)
+            retrieval_query = query
+            faiss_query = None
+            if query_understanding_options is not None:
+                try:
+                    qp_result = await self.query_processor.process(
+                        query=query,
+                        options=query_understanding_options,
+                        conversation_history=conversation_history
+                    )
+                    retrieval_query = qp_result.get_primary_query()
+                    if qp_result.hyde_applied and qp_result.hyde_answer:
+                        faiss_query = qp_result.hyde_answer
+                except Exception as qe:
+                    logger.error(f"Query understanding failed in stream (continuing): {qe}")
+
+            # Step 2: Retrieve relevant documents
             if self.is_hybrid:
                 retrieval_results = await self.retriever.retrieve(  # type: ignore
-                    query=query,
+                    query=retrieval_query,
                     top_k=top_k,
                     document_ids=document_ids,
-                    method=retrieval_method
+                    method=retrieval_method,
+                    faiss_query=faiss_query
                 )
                 # Format context using hybrid retriever's method
                 context = self.retriever.format_context(  # type: ignore
@@ -205,7 +263,7 @@ class RAGChain:
                 )
             else:
                 retrieval_results = await self.retriever.retrieve(  # type: ignore
-                    query=query,
+                    query=retrieval_query,
                     top_k=top_k,
                     document_ids=document_ids
                 )

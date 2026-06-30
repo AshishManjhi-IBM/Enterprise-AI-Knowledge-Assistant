@@ -37,7 +37,8 @@ class Settings(BaseSettings):
     # Ollama
     ollama_host: str = "http://localhost:11434"
     ollama_default_model: str = "qwen3:4b"
-    ollama_timeout: int = 120
+    ollama_timeout: int = 300       # raised — qwen3:4b on CPU can take 2-3 min for a full answer
+    ollama_num_ctx: int = 4096      # context window size passed to Ollama in every request
     
     # Hugging Face
     hf_home: str = "./models"
@@ -87,7 +88,9 @@ class Settings(BaseSettings):
     query_expansion_temperature: float = 0.7
     query_reformulation_temperature: float = 0.3
     hyde_temperature: float = 0.7
-    hyde_max_tokens: int = 500
+    hyde_max_tokens: int = 200          # keep short — hypothetical answer only needs 2-3 sentences
+    query_expansion_max_tokens: int = 150   # 3 short questions fit in ~150 tokens
+    query_reformulation_max_tokens: int = 80    # single rewritten question
     use_technical_hyde: bool = False
     
     # Logging
