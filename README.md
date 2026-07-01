@@ -1,12 +1,12 @@
 # Enterprise Agentic RAG Platform
 
-A production-ready Enterprise RAG (Retrieval-Augmented Generation) Platform with multi-provider LLM support, intelligent document processing, advanced hybrid retrieval strategies, conversational memory, and enterprise-grade safety controls.
+A production-ready Enterprise RAG (Retrieval-Augmented Generation) Platform with multi-provider LLM support, intelligent document processing, advanced hybrid retrieval strategies, conversational memory, enterprise-grade safety controls, and a full agentic LangGraph pipeline.
 
 ---
 
 ## Project Status
 
-**Current Phase: Phase 7 Complete**
+**Current Phase: Phase 9 Complete — Agentic RAG**
 
 | Phase | Name | Status |
 |-------|------|--------|
@@ -20,9 +20,9 @@ A production-ready Enterprise RAG (Retrieval-Augmented Generation) Platform with
 | 5 | Evaluation Framework (RAGAS) | ✅ Complete |
 | 6 | Conversational Memory | ✅ Complete |
 | 7 | Safety & Governance | ✅ Complete |
-| 8 | User Experience | 🔄 In Progress |
-| 9 | Agentic RAG | ⬜ Planned |
-| 10 | Production Readiness | ⬜ Planned |
+| 8 | User Experience | ✅ Complete |
+| 9 | Agentic RAG (LangGraph) | ✅ Complete |
+| 10 | Production Readiness | 🔄 In Progress |
 | 11 | Multi-Agent Ecosystem | ⬜ Planned |
 | 12 | Knowledge Graph Enhancement | ⬜ Planned |
 
@@ -30,7 +30,7 @@ A production-ready Enterprise RAG (Retrieval-Augmented Generation) Platform with
 
 ## Features
 
-### Implemented (Phases 0–7)
+### Implemented (Phases 0–9)
 
 #### Phase 0–0.5: Foundation
 - **FastAPI Backend** with health checks and status monitoring
@@ -38,7 +38,7 @@ A production-ready Enterprise RAG (Retrieval-Augmented Generation) Platform with
 - **Provider Abstraction Layer** supporting multiple LLM providers
 - **Ollama Integration** for local inference (qwen3:4b, gemma3:4b, phi4-mini)
 - **Hugging Face Transformers** support
-- **Cloud Provider Stubs** (OpenAI, Anthropic, Gemini, Azure) for Phase 10
+- **Cloud Provider Stubs** (OpenAI, Anthropic, Gemini, Azure) — activated in Phase 10
 - **LLM Factory** with automatic fallback mechanism
 - **Configuration Management** using Pydantic Settings
 - **Structured Logging** with rotation
@@ -60,7 +60,6 @@ A production-ready Enterprise RAG (Retrieval-Augmented Generation) Platform with
 - **Parallel Execution** — Simultaneous FAISS and BM25 queries
 - **Method Selection** — Choose between hybrid, semantic-only, or keyword-only retrieval
 - **Dual Score Display** — Shows both semantic and keyword scores with rankings
-- **Admin Tools** — Clear vector stores via UI, API, or command-line script
 
 #### Phase 3: Query Understanding
 - **Query Reformulation** — LLM rewrites vague or ambiguous queries
@@ -98,19 +97,36 @@ A production-ready Enterprise RAG (Retrieval-Augmented Generation) Platform with
 - **Configurable Blocking** — Per-check block-vs-warn settings via environment variables
 - **Safety UI** — Guardrail status panel in Chat sidebar
 
+#### Phase 8: User Experience
+- **Streaming Responses** — Server-sent events (SSE) for token-by-token output in Chat UI
+- **History Restore** — Conversation history automatically reloaded on page refresh
+- **Safety Badges** — Guardrail warning indicators shown on each response
+- **Query Metadata Panel** — Shows techniques applied (HyDE, expansion, reranking) per query
+- **Filename Search Filter** — Filter documents by name in the Document Library tab
+
+#### Phase 9: Agentic RAG (LangGraph)
+- **LangGraph State Machine** — Full directed graph with conditional edges and loop guards
+- **Automatic Routing** — LLM classifies each query and picks `hybrid`, `faiss`, or `bm25`
+- **Query Rewriting** — Agent rewrites vague queries before retrieval (configurable max rewrites)
+- **Document Grading** — LLM scores each retrieved chunk yes/no for relevance; irrelevant chunks are dropped before generation
+- **Grounding Verification** — Post-generation check verifies the answer only uses information from retrieved context
+- **Loop Recovery** — If grounding fails and rewrite budget remains, graph loops back for another attempt
+- **Full Graph Trace** — Every node execution is logged in the response for observability
+- **Agentic Chat UI** — Dedicated Streamlit page showing strategy chosen, rewrite count, and grounding verdict
+
 ---
 
 ## Prerequisites
 
 ### Required
 - Python 3.9 or higher
-- Ollama with `qwen3:4b` model
+- Ollama with at least one model (e.g. `qwen3:4b`)
 
 ### Optional
 - Podman + podman-compose (for PostgreSQL and Redis)
 - Redis (for persistent conversation memory)
-- GPU (for faster embeddings)
-- OpenAI API key (for cloud LLM option)
+- GPU (for faster embeddings and LLM inference)
+- OpenAI / Anthropic / Gemini API keys (for cloud LLM — Phase 10)
 
 ---
 
@@ -177,6 +193,7 @@ streamlit run frontend/streamlit/app.py
 | Backend API | http://localhost:8000 |
 | API Documentation | http://localhost:8000/docs |
 | Health Check | http://localhost:8000/health |
+| Agentic Chat | http://localhost:8501 → 🤖 Agent page |
 
 ---
 
@@ -185,11 +202,17 @@ streamlit run frontend/streamlit/app.py
 ```
 Enterprise-AI-Knowledge-Assistant/
 ├── backend/
+│   ├── agents/                         # Phase 9: Agentic RAG (LangGraph)
+│   │   ├── state.py                    # AgentState TypedDict
+│   │   ├── nodes.py                    # Node functions (route, rewrite, retrieve, grade, generate, ground)
+│   │   └── graph.py                    # Compiled LangGraph state machine
 │   ├── api/
 │   │   ├── main.py                     # FastAPI application entry point
+│   │   ├── middleware/                 # Auth middleware (Phase 10)
 │   │   ├── models/                     # Pydantic request/response schemas
 │   │   └── routes/
-│   │       ├── chat.py                 # Chat endpoint (RAG + history + guardrails)
+│   │       ├── agent.py                # Agentic chat endpoint (Phase 9)
+│   │       ├── chat.py                 # RAG chat (history + guardrails + streaming)
 │   │       ├── documents.py            # Document upload/list/delete
 │   │       ├── evaluate.py             # RAGAS evaluation (Phase 5)
 │   │       ├── guardrails.py           # Safety check endpoints (Phase 7)
@@ -199,58 +222,64 @@ Enterprise-AI-Knowledge-Assistant/
 │   │       └── status.py               # Service status
 │   ├── core/
 │   │   ├── settings.py                 # Pydantic Settings (env-driven config)
+│   │   ├── security.py                 # JWT helpers (Phase 10)
 │   │   └── logging.py                  # Structured logging with rotation
 │   ├── evaluators/                     # Phase 5: RAGAS evaluation engine
 │   │   ├── metrics.py
 │   │   └── ragas_evaluator.py
 │   ├── guardrails/                     # Phase 7: Safety & governance
-│   │   ├── detectors.py                # Injection / PII / toxicity detectors
-│   │   ├── hallucination.py            # Hallucination detector
-│   │   └── pipeline.py                 # GuardrailsPipeline orchestrator
+│   │   ├── detectors.py
+│   │   ├── hallucination.py
+│   │   └── pipeline.py
 │   ├── ingestion/                      # Document loading and chunking
-│   │   ├── loaders/                    # PDF and DOCX loaders
+│   │   ├── loaders/
 │   │   ├── chunking.py
 │   │   ├── metadata.py
 │   │   └── pipeline.py
 │   ├── llm/
 │   │   ├── embeddings.py               # BAAI/bge-small-en-v1.5
 │   │   ├── llm_service.py              # Multi-provider LLM service
-│   │   └── rag_chain.py                # RAG orchestration (phases 1–4 + 6–7)
+│   │   └── rag_chain.py                # Linear RAG orchestration
 │   ├── memory/                         # Phase 6: Conversational memory
-│   │   ├── session_memory.py           # Redis-backed session store
-│   │   └── conversation_manager.py     # Summarisation + prompt history
+│   │   ├── session_memory.py
+│   │   └── conversation_manager.py
 │   ├── providers/                      # LLM provider implementations
 │   │   ├── base.py
 │   │   ├── ollama.py
 │   │   ├── huggingface.py
+│   │   ├── openai.py                   # Phase 10
+│   │   ├── anthropic.py                # Phase 10
+│   │   ├── gemini.py                   # Phase 10
+│   │   ├── azure.py                    # Phase 10
 │   │   └── factory.py
-│   ├── query_understanding/            # Phase 3: Query processing
+│   ├── query_understanding/            # Phase 3
 │   │   ├── query_processor.py
 │   │   ├── query_reformulator.py
 │   │   ├── query_expander.py
 │   │   └── hyde_generator.py
-│   ├── rerankers/                      # Phase 4: Cross-encoder reranking
+│   ├── rerankers/                      # Phase 4
 │   │   └── cross_encoder.py
-│   ├── retrievers/                     # Phases 1–2: Retrieval
-│   │   ├── vector_store.py             # FAISS wrapper
-│   │   ├── retriever.py                # Semantic retriever
-│   │   ├── bm25_retriever.py           # BM25 keyword retriever
-│   │   ├── fusion.py                   # Reciprocal Rank Fusion
-│   │   └── hybrid_retriever.py         # Hybrid orchestrator
+│   ├── retrievers/                     # Phases 1–2
+│   │   ├── vector_store.py
+│   │   ├── retriever.py
+│   │   ├── bm25_retriever.py
+│   │   ├── fusion.py
+│   │   └── hybrid_retriever.py
 │   └── tests/
 │       ├── test_chunking.py
 │       ├── test_loaders.py
 │       ├── test_query_understanding.py
 │       ├── test_reranker.py
-│       ├── test_memory.py              # Phase 6 tests (30 cases)
-│       └── test_guardrails.py          # Phase 7 tests (41 cases)
+│       ├── test_memory.py
+│       └── test_guardrails.py
 ├── frontend/
 │   └── streamlit/
 │       ├── app.py                      # Home / dashboard
 │       └── pages/
 │           ├── 1_📄_Documents.py       # Document management
-│           ├── 2_💬_Chat.py            # RAG chat with memory + safety UI
-│           └── 3_📊_Evaluate.py        # RAGAS evaluation UI
+│           ├── 2_💬_Chat.py            # RAG chat (streaming + memory + safety)
+│           ├── 3_📊_Evaluate.py        # RAGAS evaluation UI
+│           └── 4_🤖_Agent.py           # Agentic chat UI (Phase 9)
 ├── data/
 │   ├── raw/                            # Uploaded documents
 │   ├── processed/                      # Processed text
@@ -283,6 +312,12 @@ Enterprise-AI-Knowledge-Assistant/
 | `POST` | `/api/v1/chat/stream` | Streaming chat (SSE) |
 | `POST` | `/api/v1/chat/direct` | Direct LLM (no retrieval) |
 | `GET` | `/api/v1/chat/health` | LLM service health |
+
+### Agentic RAG (Phase 9)
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/agent/chat` | Agentic chat via LangGraph pipeline |
+| `GET` | `/api/v1/agent/health` | Agent subsystem health |
 
 ### Conversation Memory (Phase 6)
 | Method | Path | Description |
@@ -380,6 +415,30 @@ GUARDRAILS_BLOCK_ON_PII_INPUT=false
 GUARDRAILS_BLOCK_ON_HALLUCINATION=false
 ```
 
+#### Phase 9 — Agentic RAG
+```env
+AGENT_ENABLE_DOCUMENT_GRADING=true   # LLM grades each chunk for relevance
+AGENT_ENABLE_GROUNDING_CHECK=true    # Post-generation grounding verification
+AGENT_MAX_REWRITES=2                 # Max query rewrite iterations
+```
+
+#### Phase 10 — Production (Cloud Providers & Auth)
+```env
+# Cloud LLM providers (set to activate)
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_API_KEY=...
+AZURE_OPENAI_API_KEY=...
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_DEPLOYMENT=gpt-4o
+
+# Authentication
+AUTH_ENABLED=false                   # set true to require JWT on all routes
+JWT_SECRET_KEY=change-me-in-production
+JWT_ALGORITHM=HS256
+JWT_EXPIRE_MINUTES=60
+```
+
 ---
 
 ## Testing
@@ -451,6 +510,10 @@ GUARDRAILS_BLOCK_ON_TOXICITY=false
 - First LLM request: Ollama loads the model (~10–30 s on CPU)
 - First embedding: Model downloads on first run (~50 MB)
 - Reranker first use: Downloads ~22 MB cross-encoder model
+- Agent mode: Each query runs 3–6 LLM calls (routing, grading, generation, grounding)
+
+### Agent Grounding Check Always Fails
+Set `AGENT_ENABLE_GROUNDING_CHECK=false` to disable (e.g. when Ollama is slow and you want faster responses), or raise `AGENT_MAX_REWRITES=0` to skip the recovery loop.
 
 ---
 
@@ -458,12 +521,15 @@ GUARDRAILS_BLOCK_ON_TOXICITY=false
 
 | Document | Description |
 |----------|-------------|
+| [docs/PHASE_9_IMPLEMENTATION.md](docs/PHASE_9_IMPLEMENTATION.md) | Phase 9 Agentic RAG architecture and implementation |
 | [docs/PHASES_3_TO_7_SUMMARY.md](docs/PHASES_3_TO_7_SUMMARY.md) | Implementation summary for Phases 3–7 |
-| [docs/PHASE_8_IMPLEMENTATION_PLAN.md](docs/PHASE_8_IMPLEMENTATION_PLAN.md) | Phase 8 plan |
+| [docs/PHASE_8_IMPLEMENTATION_PLAN.md](docs/PHASE_8_IMPLEMENTATION_PLAN.md) | Phase 8 UX plan |
 | [docs/PHASE_2_IMPLEMENTATION_PLAN.md](docs/PHASE_2_IMPLEMENTATION_PLAN.md) | Phase 2 architecture |
 | [docs/PHASE_1_DOCUMENTATION.md](docs/PHASE_1_DOCUMENTATION.md) | Phase 1 full documentation |
 | [docs/phase-0-architecture.md](docs/phase-0-architecture.md) | System architecture overview |
 | [docs/project-roadmap.md](docs/project-roadmap.md) | Full 12-phase roadmap |
+| [QUICKSTART.md](QUICKSTART.md) | 5-minute setup guide |
+| [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) | Overall implementation summary |
 
 ---
 
@@ -479,9 +545,9 @@ GUARDRAILS_BLOCK_ON_TOXICITY=false
 - [x] **Phase 5**: Evaluation Framework (RAGAS)
 - [x] **Phase 6**: Conversational Memory
 - [x] **Phase 7**: Safety & Governance
-- [ ] **Phase 8**: User Experience (streaming, improved UI)
-- [ ] **Phase 9**: Agentic RAG (LangGraph)
-- [ ] **Phase 10**: Production Readiness (auth, telemetry)
+- [x] **Phase 8**: User Experience
+- [x] **Phase 9**: Agentic RAG (LangGraph)
+- [ ] **Phase 10**: Production Readiness (JWT auth, cloud providers, telemetry)
 - [ ] **Phase 11**: Multi-Agent Ecosystem
 - [ ] **Phase 12**: Knowledge Graph Enhancement
 
@@ -493,13 +559,13 @@ GUARDRAILS_BLOCK_ON_TOXICITY=false
 - Streamlit for rapid UI development
 - Ollama for local LLM inference
 - Hugging Face for transformer models
-- LangChain for RAG components
+- LangChain / LangGraph for agentic RAG components
 - FAISS for efficient vector search
 - rank-bm25 for BM25 implementation
 - RAGAS for RAG evaluation metrics
 
 ---
 
-**Version**: 7.0.0
-**Status**: Phase 7 Complete ✅
-**Last Updated**: 2026-06-30
+**Version**: 9.0.0
+**Status**: Phase 9 Complete ✅
+**Last Updated**: 2026-07-01

@@ -6,10 +6,9 @@ Get the Enterprise Agentic RAG Platform running in 5 minutes!
 
 Before starting, ensure you have:
 
-- ✅ Python 3.12+ installed
-- ✅ Podman installed and running
-- ✅ Ollama installed with models
-- ✅ 32GB RAM available
+- ✅ Python 3.9+ installed
+- ✅ Ollama installed and running
+- ✅ 8 GB RAM minimum (16 GB recommended)
 
 ## Step-by-Step Setup
 
@@ -42,14 +41,15 @@ cp .env.example .env
 ### 3. Start Services (1 minute)
 
 ```bash
-# Start PostgreSQL and Redis
+# Start PostgreSQL and Redis (optional but recommended)
 cd deploy/podman
 podman-compose up -d
 
-# Wait for services to be ready
 # Check status
 podman-compose ps
 ```
+
+> **Note:** Redis is optional. Without it, conversation memory falls back to in-process storage (no persistence across restarts).
 
 ### 4. Verify Ollama (30 seconds)
 
@@ -57,8 +57,8 @@ podman-compose ps
 # Check Ollama is running
 ollama list
 
-# Should show: qwen3:4b, gemma3:4b, phi4-mini
-# If not, pull them:
+# Should show: qwen3:4b, gemma3:4b, or similar
+# If not, pull a model:
 ollama pull qwen3:4b
 ```
 
@@ -69,14 +69,13 @@ ollama pull qwen3:4b
 uvicorn backend.api.main:app --reload
 ```
 
-Open http://localhost:8000/docs to see the API documentation.
+Open http://localhost:8000/docs to see the full API documentation.
 
 ### 6. Start Frontend (30 seconds)
 
 ```bash
-# In a new terminal
-cd frontend/streamlit
-streamlit run app.py
+# In a new terminal, from project root
+streamlit run frontend/streamlit/app.py
 ```
 
 Open http://localhost:8501 to access the UI.
@@ -97,11 +96,19 @@ curl http://localhost:8000/api/v1/status
 # Should show all services as "connected"
 ```
 
+### Check Agent Health
+
+```bash
+curl http://localhost:8000/api/v1/agent/health
+# Should return: {"status":"healthy","graph":"compiled",...}
+```
+
 ### Check Frontend
 
 1. Open http://localhost:8501
 2. Sidebar should show "✅ Backend Connected"
 3. All services (PostgreSQL, Redis, Ollama) should show green checkmarks
+4. Four pages available: 📄 Documents, 💬 Chat, 🤖 Agent, 📊 Evaluate
 
 ## Common Issues
 
@@ -135,15 +142,27 @@ podman-compose up -d
 pip install -r requirements.txt --force-reinstall
 ```
 
+### Agent Responses Are Slow
+
+The agent runs 3–6 LLM calls per query (routing, optional rewrite, grading, generation, grounding). On CPU-only Ollama this can take 2–5 minutes. Speed up with:
+
+```bash
+# Disable document grading and grounding check (faster, less accurate)
+# Add to .env:
+AGENT_ENABLE_DOCUMENT_GRADING=false
+AGENT_ENABLE_GROUNDING_CHECK=false
+AGENT_MAX_REWRITES=0
+```
+
 ## Next Steps
 
 Now that everything is running:
 
-1. ✅ Explore the API at http://localhost:8000/docs
-2. ✅ Check the Streamlit UI at http://localhost:8501
-3. ✅ Review the [README.md](README.md) for detailed documentation
-4. ✅ Check [docs/](docs/) for architecture and implementation guides
-5. 🚀 Ready for Phase 1: Basic RAG implementation!
+1. ✅ **Upload documents** via the 📄 Documents page
+2. ✅ **Chat with RAG** via the 💬 Chat page (streaming, memory, guardrails)
+3. ✅ **Try agentic mode** via the 🤖 Agent page (LangGraph routing, grading, grounding)
+4. ✅ **Evaluate quality** via the 📊 Evaluate page (RAGAS metrics)
+5. ✅ Explore the full API at http://localhost:8000/docs
 
 ## Stopping Services
 
@@ -159,11 +178,10 @@ podman-compose down
 ## Getting Help
 
 - 📚 [Full Documentation](README.md)
-- 🏗️ [Architecture Guide](docs/phase-0-architecture.md)
-- 🛠️ [Implementation Guide](docs/implementation-guide.md)
+- 🤖 [Phase 9 Agentic RAG Guide](docs/PHASE_9_IMPLEMENTATION.md)
 - 🗺️ [Project Roadmap](docs/project-roadmap.md)
 
 ---
 
-**Estimated Setup Time**: 5 minutes  
-**Status**: Phase 0-0.5 Complete ✅
+**Estimated Setup Time**: 5 minutes
+**Status**: Phase 9 Complete ✅ — Phases 0–9 all live

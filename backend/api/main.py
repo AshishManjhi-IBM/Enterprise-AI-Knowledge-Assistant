@@ -6,7 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.core.settings import settings
 from backend.core.logging import logger
-from backend.api.routes import health, status, documents, chat, admin, evaluate, memory, guardrails
+from backend.api.routes import health, status, documents, chat, admin, evaluate, memory, guardrails, agent, auth
+from backend.api.middleware.auth import JWTAuthMiddleware
 
 
 def create_app() -> FastAPI:
@@ -23,6 +24,9 @@ def create_app() -> FastAPI:
         description="Enterprise Agentic RAG Platform with multi-provider LLM support"
     )
     
+    # JWT auth middleware (Phase 10) — transparent pass-through when auth_enabled=False
+    app.add_middleware(JWTAuthMiddleware)
+
     # CORS middleware
     app.add_middleware(
         CORSMiddleware,
@@ -51,6 +55,12 @@ def create_app() -> FastAPI:
 
     # Phase 7: Guardrails endpoints
     app.include_router(guardrails.router, tags=["guardrails"])
+
+    # Phase 9: Agentic RAG endpoints
+    app.include_router(agent.router, tags=["agent"])
+
+    # Phase 10: Auth endpoints (always registered; enforced only when auth_enabled=True)
+    app.include_router(auth.router, tags=["auth"])
     
     @app.on_event("startup")
     async def startup_event():
@@ -87,6 +97,8 @@ def create_app() -> FastAPI:
                 "evaluate": "/api/v1/evaluate",
                 "memory":      "/api/v1/memory",
                 "guardrails":  "/api/v1/guardrails",
+                "agent":       "/api/v1/agent",
+                "auth":        "/auth/token",
             }
         }
     

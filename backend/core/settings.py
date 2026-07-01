@@ -119,7 +119,27 @@ class Settings(BaseSettings):
     guardrails_block_on_toxicity:    bool = True   # block request when toxic content detected
     guardrails_block_on_pii_input:   bool = False  # warn only by default (don't block on PII in input)
     guardrails_block_on_hallucination: bool = False  # warn only by default
-    
+
+    # Agentic RAG (Phase 9)
+    agent_enable_document_grading: bool = True   # LLM-grade each retrieved chunk for relevance
+    agent_enable_grounding_check:  bool = True   # verify answer is grounded in retrieved context
+    agent_max_rewrites:            int  = 2      # maximum query-rewrite iterations (loop guard)
+
+    # Production Auth (Phase 10)
+    auth_enabled:       bool = False             # set True to require JWT on all routes
+    jwt_secret_key:     str  = "change-me-in-production"
+    jwt_algorithm:      str  = "HS256"
+    jwt_expire_minutes: int  = 60
+
+    # Cloud LLM providers (Phase 10) — set keys to activate
+    openai_api_key:            str = ""
+    anthropic_api_key:         str = ""
+    google_api_key:            str = ""
+    azure_openai_api_key:      str = ""
+    azure_openai_endpoint:     str = ""
+    azure_openai_deployment:   str = ""
+    azure_openai_api_version:  str = "2024-02-01"
+
     # Logging
     log_level: str = "INFO"
     log_file: str = "logs/app.log"

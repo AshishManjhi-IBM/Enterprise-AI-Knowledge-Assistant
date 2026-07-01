@@ -178,21 +178,20 @@ st.header("🎉 Enterprise Agentic RAG Platform")
 
 # Phase status banner
 st.success("""
-✅ **Phases 0–7 Complete** — Evaluation, Conversational Memory, and Safety & Governance are all live.
-🔄 **Phase 8: User Experience** — Streaming responses, history restore, and safety badges now active.
+✅ **Phases 0–9 Complete** — Agentic RAG with LangGraph is now live.
 """)
 
-# Feature overview — 3 columns
-col1, col2, col3 = st.columns(3)
+# Feature overview — 4 columns
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     st.subheader("📄 Documents")
     st.markdown("""
     - ✅ PDF & DOCX support
     - ✅ Intelligent chunking
-    - ✅ BAAI/bge-small-en-v1.5 embeddings
-    - ✅ FAISS + BM25 hybrid indexing
-    - ✅ Filename search filter *(Phase 8)*
+    - ✅ BGE-small embeddings
+    - ✅ FAISS + BM25 indexing
+    - ✅ Filename search filter
 
     👉 **Documents** page
     """)
@@ -200,17 +199,30 @@ with col1:
 with col2:
     st.subheader("💬 Chat")
     st.markdown("""
-    - ✅ Hybrid / Semantic / Keyword retrieval
-    - ✅ Query Understanding (HyDE, expansion)
+    - ✅ Hybrid / Semantic / Keyword
+    - ✅ Query Understanding (HyDE)
     - ✅ Cross-encoder reranking
-    - ✅ Conversational memory (Redis)
-    - ✅ Streaming responses *(Phase 8)*
-    - ✅ Safety guardrails (injection, PII, toxicity)
+    - ✅ Conversational memory
+    - ✅ Streaming responses
+    - ✅ Safety guardrails
 
     👉 **Chat** page
     """)
 
 with col3:
+    st.subheader("🤖 Agent")
+    st.markdown("""
+    - ✅ LangGraph state machine
+    - ✅ Auto retrieval routing
+    - ✅ Query rewriting
+    - ✅ Document grading
+    - ✅ Grounding verification
+    - ✅ Full graph trace
+
+    👉 **Agent** page *(Phase 9)*
+    """)
+
+with col4:
     st.subheader("📊 Evaluate")
     st.markdown("""
     - ✅ RAGAS faithfulness
